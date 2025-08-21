@@ -1,0 +1,8 @@
+This file marks the application as running in portable mode.
+
+When this file is present in the application directory:
+- All data will be stored in a 'data' subdirectory
+- Settings and database will be kept with the application
+- No files will be created in user AppData directories
+
+To disable portable mode, simply delete this file.

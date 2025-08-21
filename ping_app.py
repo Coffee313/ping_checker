@@ -20,6 +20,7 @@ class PingApp:
         # Variables
         self.excel_file = None
         self.ip_addresses = []
+        self.descriptions = []  # Store descriptions for each IP
         self.ping_results = []
         self.is_pinging = False
         self.infinite_ping = False
@@ -100,16 +101,18 @@ class PingApp:
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
         
-        self.tree = ttk.Treeview(tree_frame, columns=("IP", "Status", "Response Time", "Last Checked"), show="headings")
+        self.tree = ttk.Treeview(tree_frame, columns=("IP", "Description", "Status", "Response Time", "Last Checked"), show="headings")
         self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Configure columns with sorting capability
         self.tree.heading("IP", text="IP Address", command=lambda: self.sort_tree("IP", False))
+        self.tree.heading("Description", text="Description", command=lambda: self.sort_tree("Description", False))
         self.tree.heading("Status", text="Status", command=lambda: self.sort_tree("Status", False))
         self.tree.heading("Response Time", text="Response Time (ms)", command=lambda: self.sort_tree("Response Time", True))
         self.tree.heading("Last Checked", text="Last Checked", command=lambda: self.sort_tree("Last Checked", True))
         
         self.tree.column("IP", width=150)
+        self.tree.column("Description", width=200)
         self.tree.column("Status", width=100)
         self.tree.column("Response Time", width=150)
         self.tree.column("Last Checked", width=200)
@@ -165,6 +168,8 @@ class PingApp:
             self.tree.heading(col, text=f"IP Address{direction}")
         elif col == "Status":
             self.tree.heading(col, text=f"Status{direction}")
+        elif col == "Description":
+            self.tree.heading(col, text=f"Description{direction}")
         elif col == "Response Time":
             self.tree.heading(col, text=f"Response Time (ms){direction}")
         elif col == "Last Checked":
@@ -194,16 +199,33 @@ class PingApp:
             if ip_column is None:
                 # If no IP column found, use first column
                 ip_column = df.columns[0]
+            
+            # Try to find description column
+            description_column = None
+            for col in df.columns:
+                if any(keyword in col.lower() for keyword in ['description', 'desc', 'name', 'device', 'hostname']):
+                    description_column = col
+                    break
                 
-            # Extract IP addresses
+            # Extract IP addresses and descriptions
             self.ip_addresses = df[ip_column].dropna().tolist()
+            
+            if description_column is not None:
+                self.descriptions = df[description_column].fillna("-").tolist()
+                # Ensure descriptions list matches IP addresses length
+                while len(self.descriptions) < len(self.ip_addresses):
+                    self.descriptions.append("-")
+            else:
+                # If no description column, fill with dashes
+                self.descriptions = ["-"] * len(self.ip_addresses)
             
             # Clear previous results
             self.clear_results()
             
-        # Add IPs to treeview
-            for ip in self.ip_addresses:
-                self.tree.insert("", tk.END, values=(str(ip), "Not tested", "-", "-"))
+            # Add IPs to treeview with descriptions
+            for i, ip in enumerate(self.ip_addresses):
+                description = self.descriptions[i] if i < len(self.descriptions) else "-"
+                self.tree.insert("", tk.END, values=(str(ip), str(description), "Not tested", "-", "-"))
                 
             self.status_var.set(f"Loaded {len(self.ip_addresses)} IP addresses from {os.path.basename(filename)}")
             
@@ -304,7 +326,10 @@ class PingApp:
                     
                     # Update treeview in main thread
                     def update_tree(item_id=item_id, ip=ip, status=status, response_time=response_time, timestamp=timestamp, success=success, completed=completed, total=len(ping_tasks)):
-                        self.tree.item(item_id, values=(ip, status, response_time, timestamp))
+                        # Get current description from treeview
+                        current_values = self.tree.item(item_id)['values']
+                        description = current_values[1] if len(current_values) > 1 else "-"
+                        self.tree.item(item_id, values=(ip, description, status, response_time, timestamp))
                         # Color coding
                         if success:
                             self.tree.item(item_id, tags=('online',))
@@ -413,7 +438,10 @@ class PingApp:
                         
                         # Update treeview in main thread
                         def update_tree(item_id=item_id, ip=ip, status=status, response_time=response_time, timestamp=timestamp, success=success, completed=completed, total=len(ping_tasks), round_num=ping_round):
-                            self.tree.item(item_id, values=(ip, status, response_time, timestamp))
+                            # Get current description from treeview
+                            current_values = self.tree.item(item_id)['values']
+                            description = current_values[1] if len(current_values) > 1 else "-"
+                            self.tree.item(item_id, values=(ip, description, status, response_time, timestamp))
                             # Color coding
                             if success:
                                 self.tree.item(item_id, tags=('online',))
@@ -458,9 +486,10 @@ class PingApp:
                     values = self.tree.item(item)['values']
                     data.append({
                         'IP Address': values[0],
-                        'Status': values[1],
-                        'Response Time (ms)': values[2],
-                        'Last Checked': values[3]
+                        'Description': values[1],
+                        'Status': values[2],
+                        'Response Time (ms)': values[3],
+                        'Last Checked': values[4]
                     })
                 
                 df = pd.DataFrame(data)
